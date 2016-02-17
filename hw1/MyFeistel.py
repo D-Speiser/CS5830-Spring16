@@ -6,6 +6,8 @@ from cryptography.hazmat.primitives import hashes, padding
 from cryptography.hazmat.backends import default_backend
 import base64
 import binascii
+import random
+from Crypto.Cipher import AES
 
 def xor(a,b):
     """
@@ -13,6 +15,9 @@ def xor(a,b):
     """
     assert len(a) == len(b), "Lengths of two strings are not same. a = {}, b = {}".format(len(a), len(b))
     return ''.join(chr(ord(ai)^ord(bi)) for ai,bi in zip(a,b))
+
+def rand_bitstring(n):
+  return "".join([str(random.randint(0, 1)) for i in range(n)])
 
 class MyFeistel:
     def __init__(self, key, num_rounds, backend=None):
@@ -41,33 +46,59 @@ class MyFeistel:
     def encrypt(self, data):
         assert len(data)%2 == 0, "Supports only balanced feistel at "\
             "this moment. So provide even length messages."
-
-        # TODO - Fill in
-        return data
+        new_data = data
+        for i in range(self._num_rounds):
+            new_data = self._feistel_round_enc(new_data, i)
+        return new_data
 
     def decrypt(self, ctx):
-        assert len(ctx)%2 == 0, "Supports only balanced feistel at "\
-            "this moment. So provide even length ciphertext."
-        #TODO - Fill in
-        return ctx
+            assert len(ctx)%2 == 0, "Supports only balanced feistel at "\
+                "this moment. So provide even length ciphertext."
+            new_ctx = ctx
+            for i in range(self._num_rounds - 1, -1, -1):
+                new_ctx = self._feistel_round_dec(new_ctx, i)
+            return new_ctx
 
-    def _prf(self, key, data):
+    def _prf(self, key, data, round_num):
         """Set up secure round function F
         """
-        # TODO - set up round funciton using AES 
-        return data
+        mid = len(data) / 2
+        if round_num == 0:
+            return data[mid:]
+  
+        xored = xor(data[:mid], data[mid:])
+        ctx = AES.new(key, AES.MODE_CBC, 'This is an IV456').encrypt(xored)
+        return ctx
 
-    def _feistel_round_enc(self, data):
+    def _feistel_round_enc(self, data, round_num):
         """This function implements one round of Fiestel encryption block.
         """
-        # TODO - Implement this function
-        return data
+        mid = len(data) / 2
+        L, R = data[:mid], data[mid:]
+        Ri = xor(L, self._prf(self._round_keys[round_num], data))
+        
+        print "ENC Round {0} key: {1}".format(round_num, binascii.b2a_hex(self._round_keys[round_num]))
+        print "ENC Round {0} ctx: {1}".format(round_num, binascii.b2a_hex(Ri + R))
+        
+        return Ri + R
     
-    def _feistel_round_dec(self, data):
+    def _feistel_round_dec(self, data, round_num):
         """This function implements one round of Fiestel decryption block.
         """
-        # TODO - Implement this function 
-        return data
+        # mid = len(data) / 2
+        # Ri1, Li1 = data[:mid], data[mid:]
+        # Li = xor(Ri1, self._prf(self._round_keys[round_num], Li1))
+
+        # return Li + Li1
+
+        mid = len(data) / 2
+        Ri = data[mid:]
+        Li = xor(data[:mid], self._prf(self._round_keys[round_num], data))
+
+        print "DEC Round {0} key: {1}".format(round_num, binascii.b2a_hex(self._round_keys[round_num]))
+        print "DEC Round {0} ctx: {1}".format(round_num, binascii.b2a_hex(Li + Ri))
+
+        return Li + Ri
 
 class LengthPreservingCipher(object):
     def __init__(self, key, length=40):
