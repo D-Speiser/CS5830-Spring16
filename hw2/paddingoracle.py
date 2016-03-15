@@ -77,6 +77,7 @@ url = 'https://paddingoracle.herokuapp.com/'
 
 class PaddingOracleServer(object):
     def __init__(self, msg_len=0):
+        default_backend()
         pass
 
     @property
